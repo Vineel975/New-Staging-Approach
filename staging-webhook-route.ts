@@ -92,9 +92,35 @@ async function processInBackground(claimId: string, slNo: string, convex: Convex
     if (!auditData.success || !auditData.jobId)
       throw new Error(`audit/start error: ${auditData.error ?? "no jobId"}`);
 
+    // Pre-calculate benefit plan limit so it loads instantly when doctor opens claim
+    let preBenefitLimit: string | undefined;
+    let preBenefitRuleName: string | undefined;
+    let preBenefitWarning: string | undefined;
+    try {
+      const limitRes = await fetch(
+        `${SPECTRA_BASE_URL}/MedicalScrutiny/GetCodingProcedureEligibleLimit?claimId=${claimId}&slNo=${slNo}`,
+        { headers: { "x-staging-key": STAGING_API_KEY } }
+      );
+      if (limitRes.ok) {
+        const ld = (await limitRes.json()) as {
+          success: boolean; eligibleAmount?: number; ruleName?: string;
+          noLimit?: boolean; warning?: string;
+        };
+        if (ld.success && !ld.noLimit && ld.eligibleAmount) {
+          preBenefitLimit    = String(ld.eligibleAmount);
+          preBenefitRuleName = ld.ruleName  ?? undefined;
+          preBenefitWarning  = ld.warning   ?? undefined;
+          console.log(`[Staging] Pre-calculated benefit limit: ${preBenefitLimit}`);
+        }
+      }
+    } catch {
+      console.log(`[Staging] Benefit limit pre-calc skipped`);
+    }
+
     console.log(`[Staging] Claim ${claimId} done, jobId=${auditData.jobId}`);
     await convex.mutation(api.stagingMutations.upsertStagingJob, {
       claimId, slNo, status: "done", jobId: auditData.jobId,
+      preBenefitLimit, preBenefitRuleName, preBenefitWarning,
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
