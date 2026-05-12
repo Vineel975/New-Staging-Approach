@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Web;
@@ -7980,7 +7980,6 @@ namespace Enrollment.Controllers
         {
             try
             {
-                // Verify staging API key
                 string stagingKey = System.Configuration.ConfigurationManager.AppSettings["StagingApiKey"] ?? "";
                 string reqKey     = Request.Headers["x-staging-key"] ?? "";
                 if (!string.IsNullOrEmpty(stagingKey) && reqKey != stagingKey)
@@ -7991,32 +7990,27 @@ namespace Enrollment.Controllers
                     return Json(new { Success = false, Message = "Invalid claimId" }, JsonRequestBehavior.AllowGet);
                 int.TryParse(slNo ?? "1", out sNo);
 
-                // ── Medical Bill — call GetMedicalBillDocument internally ─────────
-                string billBase64 = null; string billFileName = null;
+                // ── Medical Bill ─────────────────────────────────────────────────────
+                string billBase64 = null;
+                string billFileName = null;
                 try
                 {
-                    var billActionResult = GetMedicalBillDocument(claimId, slNo) as System.Web.Mvc.ContentResult
-                                       ?? GetMedicalBillDocument(claimId, slNo) as System.Web.Mvc.JsonResult;
-
-                    // Use HttpWebRequest to call existing action with same session
-                    string baseUrl    = $"{Request.Url.Scheme}://{Request.Url.Authority}";
-                    var    http       = System.Net.WebRequest.Create($"{baseUrl}/MedicalScrutiny/GetMedicalBillDocument?claimId={cId}&slNo={sNo}") as System.Net.HttpWebRequest;
-                    http.Method       = "GET";
+                    string baseUrl = Request.Url.Scheme + "://" + Request.Url.Authority;
+                    var http = (System.Net.HttpWebRequest)System.Net.WebRequest.Create(
+                        baseUrl + "/MedicalScrutiny/GetMedicalBillDocument?claimId=" + cId + "&slNo=" + sNo);
+                    http.Method = "GET";
                     http.CookieContainer = new System.Net.CookieContainer();
-                    // Copy session cookie
-                    foreach (System.Net.Cookie c in Request.Cookies.AllKeys
-                        .Select(k => new System.Net.Cookie(k, Request.Cookies[k].Value, "/", Request.Url.Host)))
-                        http.CookieContainer.Add(c);
+                    foreach (string key in Request.Cookies.AllKeys)
+                        http.CookieContainer.Add(new System.Net.Cookie(key, Request.Cookies[key].Value, "/", Request.Url.Host));
 
-                    using (var resp = http.GetResponse() as System.Net.HttpWebResponse)
-                    using (var sr   = new System.IO.StreamReader(resp.GetResponseStream()))
+                    using (var resp = (System.Net.HttpWebResponse)http.GetResponse())
+                    using (var sr = new System.IO.StreamReader(resp.GetResponseStream()))
                     {
-                        string json     = sr.ReadToEnd();
-                        dynamic billObj = Newtonsoft.Json.JsonConvert.DeserializeObject(json);
-                        if (billObj.Success == true && billObj.Data != null)
+                        dynamic billObj = Newtonsoft.Json.JsonConvert.DeserializeObject(sr.ReadToEnd());
+                        if (billObj != null && billObj.Success == true && billObj.Data != null)
                         {
-                            billBase64   = billObj.Data.base64Content?.ToString();
-                            billFileName = billObj.Data.fileName?.ToString() ?? $"{cId}-bill.pdf";
+                            billBase64   = (string)billObj.Data.base64Content;
+                            billFileName = (string)billObj.Data.fileName ?? (cId + "-bill.pdf");
                         }
                     }
                 }
@@ -8028,27 +8022,27 @@ namespace Enrollment.Controllers
                 if (string.IsNullOrEmpty(billBase64))
                     return Json(new { Success = false, Message = "No medical bill found for claimId=" + claimId }, JsonRequestBehavior.AllowGet);
 
-                // ── Tariff — call GetTariffDocument internally ───────────────────────
-                string tariffBase64 = null; string tariffFileName = null;
+                // ── Tariff (optional) ────────────────────────────────────────────────
+                string tariffBase64 = null;
+                string tariffFileName = null;
                 try
                 {
-                    string baseUrl2   = $"{Request.Url.Scheme}://{Request.Url.Authority}";
-                    var    http2      = System.Net.WebRequest.Create($"{baseUrl2}/MedicalScrutiny/GetTariffDocument?claimId={cId}&slNo={sNo}") as System.Net.HttpWebRequest;
-                    http2.Method      = "GET";
+                    string baseUrl2 = Request.Url.Scheme + "://" + Request.Url.Authority;
+                    var http2 = (System.Net.HttpWebRequest)System.Net.WebRequest.Create(
+                        baseUrl2 + "/MedicalScrutiny/GetTariffDocument?claimId=" + cId + "&slNo=" + sNo);
+                    http2.Method = "GET";
                     http2.CookieContainer = new System.Net.CookieContainer();
-                    foreach (System.Net.Cookie c in Request.Cookies.AllKeys
-                        .Select(k => new System.Net.Cookie(k, Request.Cookies[k].Value, "/", Request.Url.Host)))
-                        http2.CookieContainer.Add(c);
+                    foreach (string key in Request.Cookies.AllKeys)
+                        http2.CookieContainer.Add(new System.Net.Cookie(key, Request.Cookies[key].Value, "/", Request.Url.Host));
 
-                    using (var resp2 = http2.GetResponse() as System.Net.HttpWebResponse)
-                    using (var sr2   = new System.IO.StreamReader(resp2.GetResponseStream()))
+                    using (var resp2 = (System.Net.HttpWebResponse)http2.GetResponse())
+                    using (var sr2 = new System.IO.StreamReader(resp2.GetResponseStream()))
                     {
-                        string json2     = sr2.ReadToEnd();
-                        dynamic tarObj   = Newtonsoft.Json.JsonConvert.DeserializeObject(json2);
-                        if (tarObj.Success == true && tarObj.Data != null)
+                        dynamic tarObj = Newtonsoft.Json.JsonConvert.DeserializeObject(sr2.ReadToEnd());
+                        if (tarObj != null && tarObj.Success == true && tarObj.Data != null)
                         {
-                            tariffBase64   = tarObj.Data.base64Content?.ToString();
-                            tariffFileName = tarObj.Data.fileName?.ToString() ?? $"{cId}-tariff.pdf";
+                            tariffBase64   = (string)tarObj.Data.base64Content;
+                            tariffFileName = (string)tarObj.Data.fileName ?? (cId + "-tariff.pdf");
                         }
                     }
                 }
@@ -8057,8 +8051,9 @@ namespace Enrollment.Controllers
                     System.Diagnostics.Debug.WriteLine("[Staging] Tariff fetch error (optional): " + tarEx.Message);
                 }
 
-                var serializer = new System.Web.Script.Serialization.JavaScriptSerializer { MaxJsonLength = int.MaxValue };
-                return Content(serializer.Serialize(new {
+                var js = new System.Web.Script.Serialization.JavaScriptSerializer { MaxJsonLength = int.MaxValue };
+                return Content(js.Serialize(new
+                {
                     Success        = true,
                     BillBase64     = billBase64,
                     BillFileName   = billFileName,
@@ -8082,12 +8077,6 @@ namespace Enrollment.Controllers
         [HttpGet]
         [AllowAnonymous]
         [OverrideAuthorization]
-
-        /// <summary>
-        /// GET /MedicalScrutiny/GetDocumentsForStaging
-        /// Returns medical bill + tariff as base64 for ClaimAI staging pre-processing.
-        /// Called by ClaimAI staging webhook during background processing.
-        /// </summary>
         [HttpGet]
         [AllowAnonymous]
                     }
