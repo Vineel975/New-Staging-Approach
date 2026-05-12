@@ -1,4 +1,4 @@
-﻿@{
+@{
     ViewBag.TitleDepartment = "Claims";
     ViewBag.Title = "Claim";
     Layout = "~/Views/Shared/_Layout.cshtml";
@@ -7097,97 +7097,6 @@
             var _claimIdOnLoad = $('#hdnClaimID').val();
 
             // Send facilityOptions + availedId to ClaimAI iframe after it loads
-            // ── Staging: fire webhook when claim opens ────────────────────────
-            function claimAI_fireWebhook(claimID, slNo) {
-                var claimAiUrl = '@System.Configuration.ConfigurationManager.AppSettings["claimAIUrl"]' || 'http://localhost:3000';
-                var stagingKey = '@System.Configuration.ConfigurationManager.AppSettings["StagingApiKey"]' || '';
-                $.ajax({
-                    url:         claimAiUrl + '/api/staging/webhook',
-                    method:      'POST',
-                    contentType: 'application/json',
-                    headers:     { 'x-api-key': stagingKey },
-                    data:        JSON.stringify({ claimId: claimID.toString(), slNo: (slNo || '1').toString() }),
-                    success: function(res) {
-                        console.log('[ClaimAI] Staging webhook:', res.status);
-                    },
-                    error: function() {
-                        console.log('[ClaimAI] Staging webhook failed — will use on-demand');
-                    }
-                });
-            }
-
-            // ── Staging: check if pre-processed, else on-demand ──────────────────
-            function claimAI_checkStagingAndLoad(claimID, slNo, onDemandFn) {
-                var claimAiUrl = '@System.Configuration.ConfigurationManager.AppSettings["claimAIUrl"]' || 'http://localhost:3000';
-                var stagingKey = '@System.Configuration.ConfigurationManager.AppSettings["StagingApiKey"]' || '';
-
-                $.ajax({
-                    url:     claimAiUrl + '/api/staging/summary',
-                    method:  'GET',
-                    headers: { 'x-api-key': stagingKey },
-                    data:    { claimId: claimID.toString(), slNo: (slNo || '1').toString() },
-                    timeout: 2000, // 2s max — never slow down page load
-                    success: function(res) {
-                        console.log('[ClaimAI] Staging status:', res.status, res.jobId || '');
-                        if (res.status === 'done' && res.jobId) {
-                            // Pre-processed — load instantly
-                            var iframeUrl = claimAiUrl + '/job/' + res.jobId;
-                            console.log('[ClaimAI] Staging ready — loading iframe:', iframeUrl);
-                            _setAllIframeSrcs(iframeUrl);
-                        } else if (res.status === 'pending' || res.status === 'processing') {
-                            // Still processing — poll every 5s
-                            console.log('[ClaimAI] Staging pending — polling...');
-                            claimAI_pollStaging(claimID, slNo, onDemandFn, claimAiUrl, stagingKey, 0);
-                        } else {
-                            // Not found or failed — use on-demand
-                            console.log('[ClaimAI] Staging not found — using on-demand');
-                            onDemandFn();
-                        }
-                    },
-                    error: function() {
-                        // Staging unreachable — use on-demand
-                        console.log('[ClaimAI] Staging unreachable — using on-demand');
-                        onDemandFn();
-                    }
-                });
-            }
-
-            function claimAI_pollStaging(claimID, slNo, onDemandFn, claimAiUrl, stagingKey, attempts) {
-                if (attempts >= 12) { // max 60s of polling (12 x 5s)
-                    console.log('[ClaimAI] Staging poll timeout — falling back to on-demand');
-                    onDemandFn();
-                    return;
-                }
-                setTimeout(function() {
-                    $.ajax({
-                        url:     claimAiUrl + '/api/staging/summary',
-                        method:  'GET',
-                        headers: { 'x-api-key': stagingKey },
-                        data:    { claimId: claimID.toString(), slNo: (slNo || '1').toString() },
-                        timeout: 3000,
-                        success: function(res) {
-                            if (res.status === 'done' && res.jobId) {
-                                var iframeUrl = claimAiUrl + '/job/' + res.jobId;
-                                console.log('[ClaimAI] Staging ready after poll — loading:', iframeUrl);
-                                _setAllIframeSrcs(iframeUrl);
-                            } else if (res.status === 'pending' || res.status === 'processing') {
-                                claimAI_pollStaging(claimID, slNo, onDemandFn, claimAiUrl, stagingKey, attempts + 1);
-                            } else {
-                                onDemandFn();
-                            }
-                        },
-                        error: function() { onDemandFn(); }
-                    });
-                }, 5000);
-            }
-
-            function _setAllIframeSrcs(url) {
-                $('#ifrClaimAI').attr('src', url);
-                $('#ifrClaimAI2').attr('src', url);
-                $('#ifrClaimAI3').attr('src', url);
-                $('#ifrClaimAI4').attr('src', url);
-            }
-
             function claimAI_sendFacilityOptions() {
                 var iframe = document.getElementById('ifrClaimAI');
                 if (!iframe || !iframe.contentWindow) return;
@@ -7759,7 +7668,85 @@
             };
             // End (SP3V-4924)
 
-            $(document).ready(function () {
+            // ── Staging global functions (must be global scope) ─────────────────
+        function claimAI_fireWebhook(claimID, slNo) {
+            var claimAiUrl = '@System.Configuration.ConfigurationManager.AppSettings["claimAIUrl"]' || 'http://localhost:3000';
+            var stagingKey = '@System.Configuration.ConfigurationManager.AppSettings["StagingApiKey"]' || '';
+            $.ajax({
+                url:         claimAiUrl + '/api/staging/webhook',
+                method:      'POST',
+                contentType: 'application/json',
+                headers:     { 'x-api-key': stagingKey },
+                data:        JSON.stringify({ claimId: claimID.toString(), slNo: (slNo || '1').toString() }),
+                success: function(res) { console.log('[ClaimAI] Staging webhook:', res.status); },
+                error:   function()    { console.log('[ClaimAI] Staging webhook failed — will use on-demand'); }
+            });
+        }
+
+        function claimAI_checkStagingAndLoad(claimID, slNo, onDemandFn) {
+            var claimAiUrl = '@System.Configuration.ConfigurationManager.AppSettings["claimAIUrl"]' || 'http://localhost:3000';
+            var stagingKey = '@System.Configuration.ConfigurationManager.AppSettings["StagingApiKey"]' || '';
+            $.ajax({
+                url:     claimAiUrl + '/api/staging/summary',
+                method:  'GET',
+                headers: { 'x-api-key': stagingKey },
+                data:    { claimId: claimID.toString(), slNo: (slNo || '1').toString() },
+                timeout: 2000,
+                success: function(res) {
+                    console.log('[ClaimAI] Staging status:', res.status, res.jobId || '');
+                    if (res.status === 'done' && res.jobId) {
+                        var iframeUrl = claimAiUrl + '/job/' + res.jobId + '?embedded=1';
+                        console.log('[ClaimAI] Staging ready — loading iframe:', iframeUrl);
+                        _setAllIframeSrcs(iframeUrl);
+                    } else if (res.status === 'pending' || res.status === 'processing') {
+                        console.log('[ClaimAI] Staging pending — polling...');
+                        claimAI_pollStaging(claimID, slNo, onDemandFn, claimAiUrl, stagingKey, 0);
+                    } else {
+                        console.log('[ClaimAI] Staging not found — using on-demand');
+                        onDemandFn();
+                    }
+                },
+                error: function() {
+                    console.log('[ClaimAI] Staging unreachable — using on-demand');
+                    onDemandFn();
+                }
+            });
+        }
+
+        function claimAI_pollStaging(claimID, slNo, onDemandFn, claimAiUrl, stagingKey, attempts) {
+            if (attempts >= 12) {
+                console.log('[ClaimAI] Staging poll timeout — falling back to on-demand');
+                onDemandFn();
+                return;
+            }
+            setTimeout(function() {
+                $.ajax({
+                    url:     claimAiUrl + '/api/staging/summary',
+                    method:  'GET',
+                    headers: { 'x-api-key': stagingKey },
+                    data:    { claimId: claimID.toString(), slNo: (slNo || '1').toString() },
+                    timeout: 3000,
+                    success: function(res) {
+                        if (res.status === 'done' && res.jobId) {
+                            var iframeUrl = claimAiUrl + '/job/' + res.jobId + '?embedded=1';
+                            console.log('[ClaimAI] Staging ready after poll:', iframeUrl);
+                            _setAllIframeSrcs(iframeUrl);
+                        } else if (res.status === 'pending' || res.status === 'processing') {
+                            claimAI_pollStaging(claimID, slNo, onDemandFn, claimAiUrl, stagingKey, attempts + 1);
+                        } else {
+                            onDemandFn();
+                        }
+                    },
+                    error: function() { onDemandFn(); }
+                });
+            }, 5000);
+        }
+
+        function _setAllIframeSrcs(url) {
+            $('#ifrClaimAI, #ifrClaimAI2, #ifrClaimAI3, #ifrClaimAI4').attr('src', url);
+        }
+
+        $(document).ready(function () {
 
                 window.unload = function () {
                     if (window.parent.windowDMSDocView != undefined) {
