@@ -7695,9 +7695,8 @@
                 success: function(res) {
                     console.log('[ClaimAI] Staging status:', res.status, res.jobId || '');
                     if (res.status === 'done' && res.jobId) {
-                        var iframeUrl = claimAiUrl + '/job/' + res.jobId + '?embedded=1';
-                        console.log('[ClaimAI] Staging ready — loading iframe:', iframeUrl);
-                        _setAllIframeSrcs(iframeUrl);
+                        console.log('[ClaimAI] Staging ready — loading iframe for jobId:', res.jobId);
+                        _setAllIframeSrcs(res.jobId);
                     } else if (res.status === 'pending' || res.status === 'processing') {
                         console.log('[ClaimAI] Staging pending — polling...');
                         claimAI_pollStaging(claimID, slNo, onDemandFn, claimAiUrl, stagingKey, 0);
@@ -7728,9 +7727,8 @@
                     timeout: 3000,
                     success: function(res) {
                         if (res.status === 'done' && res.jobId) {
-                            var iframeUrl = claimAiUrl + '/job/' + res.jobId + '?embedded=1';
-                            console.log('[ClaimAI] Staging ready after poll:', iframeUrl);
-                            _setAllIframeSrcs(iframeUrl);
+                            console.log('[ClaimAI] Staging ready after poll, jobId:', res.jobId);
+                            _setAllIframeSrcs(res.jobId);
                         } else if (res.status === 'pending' || res.status === 'processing') {
                             claimAI_pollStaging(claimID, slNo, onDemandFn, claimAiUrl, stagingKey, attempts + 1);
                         } else {
@@ -7742,8 +7740,16 @@
             }, 5000);
         }
 
-        function _setAllIframeSrcs(url) {
-            $('#ifrClaimAI, #ifrClaimAI2, #ifrClaimAI3, #ifrClaimAI4').attr('src', url);
+        function _setAllIframeSrcs(jobId) {
+            // Build full iframe URL with required params — same as SubmitAndLoadIframe success handler
+            var claimAiUrl = '@System.Configuration.ConfigurationManager.AppSettings["claimAIUrl"]' || 'http://localhost:3000';
+            var src = claimAiUrl + '/job/' + encodeURIComponent(jobId) + '?embedded=1'
+                    + (window._claimAI_reqFacilityName ? '&availedAccom=' + encodeURIComponent(window._claimAI_reqFacilityName) : '');
+            console.log('[ClaimAI] Staging setting iframe src:', src);
+            $('#divAiLoading').hide();
+            $('#ifrClaimAI').attr('src', src).show();
+            // Also set other iframe tabs if present
+            $('#ifrClaimAI2, #ifrClaimAI3, #ifrClaimAI4').attr('src', src);
         }
 
         $(document).ready(function () {
