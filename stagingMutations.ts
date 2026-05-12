@@ -21,29 +21,33 @@ export const upsertStagingJob = mutation({
       .first();
 
     if (existing) {
-      await ctx.db.patch(existing._id, {
-        status:             args.status,
-        jobId:              args.jobId,
-        error:              args.error,
-        processedAt:        args.status === "done" ? Date.now() : existing.processedAt,
-        preBenefitLimit:    args.preBenefitLimit,
-        preBenefitRuleName: args.preBenefitRuleName,
-        preBenefitWarning:  args.preBenefitWarning,
-      });
+      // Build patch object — omit undefined fields (Convex doesn't accept undefined)
+      const patch: Record<string, unknown> = {
+        status: args.status,
+        processedAt: args.status === "done" ? Date.now() : existing.processedAt,
+      };
+      if (args.jobId              !== undefined) patch.jobId              = args.jobId;
+      if (args.error              !== undefined) patch.error              = args.error;
+      if (args.preBenefitLimit    !== undefined) patch.preBenefitLimit    = args.preBenefitLimit;
+      if (args.preBenefitRuleName !== undefined) patch.preBenefitRuleName = args.preBenefitRuleName;
+      if (args.preBenefitWarning  !== undefined) patch.preBenefitWarning  = args.preBenefitWarning;
+      await ctx.db.patch(existing._id, patch);
       return existing._id;
     } else {
-      return await ctx.db.insert("stagingJobs", {
-        claimId:            args.claimId,
-        slNo:               args.slNo,
-        status:             args.status,
-        jobId:              args.jobId,
-        error:              args.error,
-        createdAt:          Date.now(),
-        processedAt:        args.status === "done" ? Date.now() : undefined,
-        preBenefitLimit:    args.preBenefitLimit,
-        preBenefitRuleName: args.preBenefitRuleName,
-        preBenefitWarning:  args.preBenefitWarning,
-      });
+      // Build insert object — omit undefined fields
+      const insert: Record<string, unknown> = {
+        claimId:   args.claimId,
+        slNo:      args.slNo,
+        status:    args.status,
+        createdAt: Date.now(),
+      };
+      if (args.status === "done")              insert.processedAt        = Date.now();
+      if (args.jobId              !== undefined) insert.jobId              = args.jobId;
+      if (args.error              !== undefined) insert.error              = args.error;
+      if (args.preBenefitLimit    !== undefined) insert.preBenefitLimit    = args.preBenefitLimit;
+      if (args.preBenefitRuleName !== undefined) insert.preBenefitRuleName = args.preBenefitRuleName;
+      if (args.preBenefitWarning  !== undefined) insert.preBenefitWarning  = args.preBenefitWarning;
+      return await ctx.db.insert("stagingJobs", insert as never);
     }
   },
 });
