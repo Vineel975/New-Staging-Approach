@@ -37,7 +37,15 @@ export async function GET(request: NextRequest) {
   if (!job) job = await convex.query(api.stagingMutations.getLatestStagingJob, { claimId });
 
   if (!job)                                   return NextResponse.json({ status: "not_found" },                          { headers: corsHeaders() });
-  if (job.status === "done" && job.jobId)     return NextResponse.json({ status: "done", jobId: job.jobId, preBenefitLimit: job.preBenefitLimit, preBenefitRuleName: job.preBenefitRuleName, preBenefitWarning: job.preBenefitWarning }, { headers: corsHeaders() });
+  if (job.status === "done" && job.jobId) {
+    return NextResponse.json({
+      status:             "done",
+      jobId:              job.jobId,
+      preBenefitLimit:    job.preBenefitLimit    ?? null,
+      preBenefitRuleName: job.preBenefitRuleName ?? null,
+      preBenefitWarning:  job.preBenefitWarning  ?? null,
+    }, { headers: corsHeaders() });
+  }
   if (job.status === "processing" || job.status === "pending") return NextResponse.json({ status: "pending" },           { headers: corsHeaders() });
   if (job.status === "failed")                return NextResponse.json({ status: "failed", error: job.error },          { headers: corsHeaders() });
 
