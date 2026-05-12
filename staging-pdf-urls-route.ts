@@ -34,8 +34,8 @@ export async function GET(request: NextRequest) {
 
   const convex = new ConvexHttpClient(CONVEX_URL);
 
-  // Get job files
-  const job = await convex.query(api.processing.getJobById, { id: jobId as Id<"processJob"> });
+  // Get job files — getJobById takes { jobId } not { id }
+  const job = await convex.query(api.processing.getJobById, { jobId: jobId as Id<"processJob"> });
   if (!job) {
     return NextResponse.json({ error: "Job not found" }, { status: 404, headers: corsHeaders() });
   }
@@ -43,12 +43,15 @@ export async function GET(request: NextRequest) {
   const billFile   = job.files?.find((f) => f.fileType === "hospitalBill");
   const tariffFile = job.files?.find((f) => f.fileType === "tariff");
 
-  const billUrl   = billFile?.storageId
-    ? await convex.query(api.processing.getPdfUrl, { storageId: billFile.storageId as Id<"_storage"> })
+  const billStorageId   = billFile?.storageId as Id<"_storage"> | undefined;
+  const tariffStorageId = tariffFile?.storageId as Id<"_storage"> | undefined;
+
+  const billUrl   = billStorageId
+    ? await convex.query(api.processing.getPdfUrl, { storageId: billStorageId })
     : null;
 
-  const tariffUrl = tariffFile?.storageId
-    ? await convex.query(api.processing.getPdfUrl, { storageId: tariffFile.storageId as Id<"_storage"> })
+  const tariffUrl = tariffStorageId
+    ? await convex.query(api.processing.getPdfUrl, { storageId: tariffStorageId })
     : null;
 
   return NextResponse.json({
