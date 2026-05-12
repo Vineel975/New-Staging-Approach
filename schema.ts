@@ -117,13 +117,17 @@ export default defineSchema({
     .index("by_normalizedHospitalName", ["normalizedHospitalName"]),
 
   stagingJobs: defineTable({
-    claimId:     v.string(),
-    slNo:        v.string(),
-    jobId:       v.optional(v.string()),
-    status:      v.string(),      // "pending" | "processing" | "done" | "failed"
-    error:       v.optional(v.string()),
-    processedAt: v.optional(v.number()),
-    createdAt:   v.number(),
+    claimId:            v.string(),
+    slNo:               v.string(),
+    jobId:              v.optional(v.string()),
+    status:             v.string(),      // "pending" | "processing" | "done" | "failed"
+    error:              v.optional(v.string()),
+    processedAt:        v.optional(v.number()),
+    createdAt:          v.number(),
+    // Pre-calculated benefit plan limit
+    preBenefitLimit:    v.optional(v.string()),
+    preBenefitRuleName: v.optional(v.string()),
+    preBenefitWarning:  v.optional(v.string()),
   })
     .index("by_claim",   ["claimId", "slNo"])
     .index("by_claimId", ["claimId"]),
