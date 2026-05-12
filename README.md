@@ -1,3 +1,6 @@
+<img width="1323" height="269" alt="image" src="https://github.com/user-attachments/assets/8514f0a7-626d-485e-aa15-1993d8403d80" />
+
+
 Access to XMLHttpRequest at 'http://localhost:3000/api/staging/webhook' from origin 'http://localhost:50052' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource.
 Index:15503 [ClaimAI] Staging webhook failed — will use on-demand
 jquery.min.js:4  POST http://localhost:3000/api/staging/webhook net::ERR_FAILED
