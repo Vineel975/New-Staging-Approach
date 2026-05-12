@@ -7696,7 +7696,7 @@
                     console.log('[ClaimAI] Staging status:', res.status, res.jobId || '');
                     if (res.status === 'done' && res.jobId) {
                         console.log('[ClaimAI] Staging ready — loading iframe for jobId:', res.jobId);
-                        _setAllIframeSrcs(res.jobId);
+                        _setAllIframeSrcs(res.jobId, res);
                     } else if (res.status === 'pending' || res.status === 'processing') {
                         console.log('[ClaimAI] Staging pending — polling...');
                         claimAI_pollStaging(claimID, slNo, onDemandFn, claimAiUrl, stagingKey, 0);
@@ -7728,7 +7728,7 @@
                     success: function(res) {
                         if (res.status === 'done' && res.jobId) {
                             console.log('[ClaimAI] Staging ready after poll, jobId:', res.jobId);
-                            _setAllIframeSrcs(res.jobId);
+                            _setAllIframeSrcs(res.jobId, res);
                         } else if (res.status === 'pending' || res.status === 'processing') {
                             claimAI_pollStaging(claimID, slNo, onDemandFn, claimAiUrl, stagingKey, attempts + 1);
                         } else {
@@ -7740,15 +7740,65 @@
             }, 5000);
         }
 
-        function _setAllIframeSrcs(jobId) {
-            // Build full iframe URL with required params — same as SubmitAndLoadIframe success handler
+        function _setAllIframeSrcs(jobId, stagingData) {
             var claimAiUrl = '@System.Configuration.ConfigurationManager.AppSettings["claimAIUrl"]' || 'http://localhost:3000';
+            var stagingKey = '@System.Configuration.ConfigurationManager.AppSettings["StagingApiKey"]' || '';
+
+            // Step 1: Prefetch PDF URLs so browser starts downloading before iframe loads
+            $.ajax({
+                url:     claimAiUrl + '/api/staging/pdf-urls',
+                method:  'GET',
+                headers: { 'x-api-key': stagingKey },
+                data:    { jobId: jobId },
+                timeout: 3000,
+                success: function(res) {
+                    // Trigger browser prefetch for bill and tariff PDFs
+                    if (res.billUrl) {
+                        var l1 = document.createElement('link');
+                        l1.rel = 'prefetch'; l1.href = res.billUrl; l1.as = 'fetch';
+                        document.head.appendChild(l1);
+                        console.log('[ClaimAI] Prefetching bill PDF:', res.billFileName);
+                    }
+                    if (res.tariffUrl) {
+                        var l2 = document.createElement('link');
+                        l2.rel = 'prefetch'; l2.href = res.tariffUrl; l2.as = 'fetch';
+                        document.head.appendChild(l2);
+                        console.log('[ClaimAI] Prefetching tariff PDF:', res.tariffFileName);
+                    }
+                },
+                error: function() {
+                    console.log('[ClaimAI] PDF prefetch failed — non-critical');
+                }
+            });
+
+            // Step 2: Load iframe
             var src = claimAiUrl + '/job/' + encodeURIComponent(jobId) + '?embedded=1'
                     + (window._claimAI_reqFacilityName ? '&availedAccom=' + encodeURIComponent(window._claimAI_reqFacilityName) : '');
             console.log('[ClaimAI] Staging setting iframe src:', src);
             $('#divAiLoading').hide();
-            $('#ifrClaimAI').attr('src', src).show();
-            // Also set other iframe tabs if present
+            var $ifr = $('#ifrClaimAI').attr('src', src).show();
+
+            // Step 3: After iframe loads, send pre-calculated benefit limit + facility options
+            $ifr.off('load.staging').on('load.staging', function() {
+                var ifrWin = this.contentWindow;
+                if (!ifrWin) return;
+                // Send facility options
+                claimAI_sendFacilityOptions();
+                // Send pre-calculated benefit limit if available
+                if (stagingData && stagingData.preBenefitLimit) {
+                    ifrWin.postMessage({
+                        source:             'spectra',
+                        type:               'codingProcedureLimitResult',
+                        success:            true,
+                        noLimit:            false,
+                        eligibleAmount:     parseFloat(stagingData.preBenefitLimit),
+                        ruleName:           stagingData.preBenefitRuleName || '',
+                        warning:            stagingData.preBenefitWarning  || undefined
+                    }, '*');
+                    console.log('[ClaimAI] Staging: sent pre-calculated benefit limit:', stagingData.preBenefitLimit);
+                }
+            });
+
             $('#ifrClaimAI2, #ifrClaimAI3, #ifrClaimAI4').attr('src', src);
         }
 
